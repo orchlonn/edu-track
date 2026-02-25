@@ -166,8 +166,18 @@ export const exams: Exam[] = [
   { id: "e10", classId: "c4", name: "Test 1 - Biology Basics", date: "2026-02-14", maxScore: 100, type: "test", isPublished: true },
 ];
 
+// ─── Seeded RNG (deterministic across server/client) ─
+function createSeededRng(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0x100000000;
+  };
+}
+
 // ─── Grade Entries ───────────────────────────────────
 function generateGradeEntries(): GradeEntry[] {
+  const rng = createSeededRng(42);
   const entries: GradeEntry[] = [];
   let id = 1;
 
@@ -184,7 +194,7 @@ function generateGradeEntries(): GradeEntry[] {
     const cls = classes.find(c => c.id === exam.classId)!;
     for (const studentId of cls.studentIds) {
       const [min, max] = studentScoreRange[studentId] || [60, 80];
-      const rawScore = Math.floor(Math.random() * (max - min + 1)) + min;
+      const rawScore = Math.floor(rng() * (max - min + 1)) + min;
       const score = Math.min(rawScore, exam.maxScore);
       const letterGrade = calculateLetterGrade(score, exam.maxScore);
       entries.push({
@@ -192,7 +202,7 @@ function generateGradeEntries(): GradeEntry[] {
         studentId,
         examId: exam.id,
         classId: exam.classId,
-        score: exam.isPublished ? score : (Math.random() > 0.3 ? score : null),
+        score: exam.isPublished ? score : (rng() > 0.3 ? score : null),
         letterGrade: exam.isPublished ? letterGrade : null,
         isPublished: exam.isPublished,
       });
