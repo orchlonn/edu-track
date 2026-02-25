@@ -4,9 +4,15 @@ import { useState, useMemo } from "react";
 import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { StudentCard } from "./student-card";
-import { students, classes } from "@/lib/mock-data";
+import { type Student, type Class } from "@/lib/types";
 
-export function StudentList() {
+interface StudentListProps {
+  students: Student[];
+  classes: Class[];
+  statsMap: Record<string, { avg: number | null; attendance: number }>;
+}
+
+export function StudentList({ students, classes, statsMap }: StudentListProps) {
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState("all");
 
@@ -36,7 +42,7 @@ export function StudentList() {
     }
 
     return list.sort((a, b) => a.lastName.localeCompare(b.lastName));
-  }, [search, classFilter]);
+  }, [search, classFilter, students, classes]);
 
   return (
     <div className="space-y-4">
@@ -58,7 +64,12 @@ export function StudentList() {
 
       <div className="space-y-2">
         {filteredStudents.map((student) => (
-          <StudentCard key={student.id} student={student} />
+          <StudentCard
+            key={student.id}
+            student={student}
+            avg={statsMap[student.id]?.avg ?? null}
+            attendance={statsMap[student.id]?.attendance ?? 100}
+          />
         ))}
       </div>
 

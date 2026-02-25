@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -15,46 +15,63 @@ import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useClassContext } from "@/contexts/class-context";
-import { classes, getAttendanceDailyBreakdown, attendanceRecords } from "@/lib/mock-data";
+import {
+  fetchClasses,
+  fetchAllAttendanceRecords,
+  fetchAttendanceDailyBreakdown,
+} from "@/lib/supabase/queries";
 import { formatDateShort } from "@/lib/utils";
+import type { Class, AttendanceRecord } from "@/lib/types";
 
 export function AttendanceTrends() {
   const { selectedClassId, setSelectedClassId } = useClassContext();
+  const [classList, setClassList] = useState<Class[]>([]);
+  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([]);
+  const [chartData, setChartData] = useState<{ date: string; Present: number; Absent: number; Late: number; Excused: number }[]>([]);
+
+  useEffect(() => {
+    fetchClasses().then(setClassList);
+    fetchAllAttendanceRecords().then(setAllRecords);
+  }, []);
+
+  useEffect(() => {
+    async function loadChart() {
+      if (selectedClassId === "all" || !classList.find((c) => c.id === selectedClassId)) {
+        const dates = [...new Set(allRecords.map((r) => r.date))].sort();
+        setChartData(dates.map((date) => {
+          const records = allRecords.filter((r) => r.date === date);
+          return {
+            date: formatDateShort(date),
+            Present: records.filter((r) => r.status === "present").length,
+            Absent: records.filter((r) => r.status === "absent").length,
+            Late: records.filter((r) => r.status === "late").length,
+            Excused: records.filter((r) => r.status === "excused").length,
+          };
+        }));
+      } else {
+        const breakdown = await fetchAttendanceDailyBreakdown(selectedClassId);
+        setChartData(breakdown.map((d) => ({
+          date: formatDateShort(d.date),
+          Present: d.present,
+          Absent: d.absent,
+          Late: d.late,
+          Excused: d.excused,
+        })));
+      }
+    }
+    loadChart();
+  }, [selectedClassId, classList, allRecords]);
 
   const classOptions = [
     { value: "all", label: "All Classes" },
-    ...classes.map((c) => ({ value: c.id, label: c.name })),
+    ...classList.map((c) => ({ value: c.id, label: c.name })),
   ];
-
-  const chartData = useMemo(() => {
-    if (selectedClassId === "all" || !classes.find((c) => c.id === selectedClassId)) {
-      // Aggregate across all classes
-      const dates = [...new Set(attendanceRecords.map((r) => r.date))].sort();
-      return dates.map((date) => {
-        const records = attendanceRecords.filter((r) => r.date === date);
-        return {
-          date: formatDateShort(date),
-          Present: records.filter((r) => r.status === "present").length,
-          Absent: records.filter((r) => r.status === "absent").length,
-          Late: records.filter((r) => r.status === "late").length,
-          Excused: records.filter((r) => r.status === "excused").length,
-        };
-      });
-    }
-    return getAttendanceDailyBreakdown(selectedClassId).map((d) => ({
-      date: formatDateShort(d.date),
-      Present: d.present,
-      Absent: d.absent,
-      Late: d.late,
-      Excused: d.excused,
-    }));
-  }, [selectedClassId]);
 
   const summary = useMemo(() => {
     const records =
-      selectedClassId === "all" || !classes.find((c) => c.id === selectedClassId)
-        ? attendanceRecords
-        : attendanceRecords.filter((r) => r.classId === selectedClassId);
+      selectedClassId === "all" || !classList.find((c) => c.id === selectedClassId)
+        ? allRecords
+        : allRecords.filter((r) => r.classId === selectedClassId);
 
     const total = records.length;
     const present = records.filter((r) => r.status === "present").length;
@@ -62,7 +79,6 @@ export function AttendanceTrends() {
     const late = records.filter((r) => r.status === "late").length;
     const rate = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
 
-    // Most absent day of week
     const absentDays = records
       .filter((r) => r.status === "absent")
       .map((r) => new Date(r.date + "T00:00:00").getDay());
@@ -75,7 +91,7 @@ export function AttendanceTrends() {
     const worstDayName = worstDay ? dayNames[Number(worstDay[0])] : "N/A";
 
     return { total, present, absent, late, rate, worstDayName };
-  }, [selectedClassId]);
+  }, [selectedClassId, classList, allRecords]);
 
   return (
     <div className="space-y-4">

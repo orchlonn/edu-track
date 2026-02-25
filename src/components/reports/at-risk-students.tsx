@@ -1,49 +1,74 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { AlertTriangle, ArrowRight } from "lucide-react";
-import { students, classes, getStudentAverageGrade, getStudentAttendanceRate } from "@/lib/mock-data";
+import {
+  fetchStudents,
+  fetchClasses,
+  fetchStudentAverageGrade,
+  fetchStudentAttendanceRate,
+} from "@/lib/supabase/queries";
+import type { Student, Class } from "@/lib/types";
+
+interface StudentStats {
+  student: Student;
+  avg: number | null;
+  attendance: number;
+  studentClasses: string;
+}
 
 export function AtRiskStudents() {
   const [gradeThreshold, setGradeThreshold] = useState(65);
   const [attendanceThreshold, setAttendanceThreshold] = useState(80);
+  const [allStats, setAllStats] = useState<StudentStats[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const [studentList, classList] = await Promise.all([fetchStudents(), fetchClasses()]);
+      const stats: StudentStats[] = await Promise.all(
+        studentList.map(async (student) => {
+          const [avg, attendance] = await Promise.all([
+            fetchStudentAverageGrade(student.id),
+            fetchStudentAttendanceRate(student.id),
+          ]);
+          const studentClasses = student.classIds
+            .map((id) => classList.find((c) => c.id === id)?.name)
+            .filter(Boolean)
+            .join(", ");
+          return { student, avg, attendance, studentClasses };
+        })
+      );
+      setAllStats(stats);
+      setLoading(false);
+    }
+    load();
+  }, []);
 
   const atRiskList = useMemo(() => {
-    return students
-      .map((student) => {
-        const avg = getStudentAverageGrade(student.id);
-        const attendance = getStudentAttendanceRate(student.id);
-        const studentClasses = student.classIds
-          .map((id) => classes.find((c) => c.id === id)?.name)
-          .filter(Boolean)
-          .join(", ");
-
-        const isLowGrade = avg !== null && avg < gradeThreshold;
-        const isLowAttendance = attendance < attendanceThreshold;
-
-        return {
-          student,
-          avg,
-          attendance,
-          studentClasses,
-          isLowGrade,
-          isLowAttendance,
-          isAtRisk: isLowGrade || isLowAttendance,
-        };
+    return allStats
+      .map((s) => {
+        const isLowGrade = s.avg !== null && s.avg < gradeThreshold;
+        const isLowAttendance = s.attendance < attendanceThreshold;
+        return { ...s, isLowGrade, isLowAttendance, isAtRisk: isLowGrade || isLowAttendance };
       })
       .filter((s) => s.isAtRisk)
       .sort((a, b) => {
-        // Sort by severity: both flags first, then by worst metric
         const aFlags = (a.isLowGrade ? 1 : 0) + (a.isLowAttendance ? 1 : 0);
         const bFlags = (b.isLowGrade ? 1 : 0) + (b.isLowAttendance ? 1 : 0);
         if (aFlags !== bFlags) return bFlags - aFlags;
         return (a.avg ?? 0) - (b.avg ?? 0);
       });
-  }, [gradeThreshold, attendanceThreshold]);
+  }, [allStats, gradeThreshold, attendanceThreshold]);
+
+  if (loading) {
+    return <p className="py-8 text-center text-sm text-gray-500">Loading at-risk data...</p>;
+  }
 
   return (
     <div className="space-y-4">

@@ -12,20 +12,21 @@ import {
   Legend,
 } from "recharts";
 import { Card } from "@/components/ui/card";
-import { getGradeEntriesForStudent, exams, classes } from "@/lib/mock-data";
+import { type GradeEntry, type Exam, type Class } from "@/lib/types";
 import { formatDateShort } from "@/lib/utils";
 
 interface GradeHistoryChartProps {
-  studentId: string;
+  gradeEntries: GradeEntry[];
+  exams: Exam[];
+  classes: Class[];
 }
 
-export function GradeHistoryChart({ studentId }: GradeHistoryChartProps) {
+export function GradeHistoryChart({ gradeEntries, exams, classes }: GradeHistoryChartProps) {
   const chartData = useMemo(() => {
-    const entries = getGradeEntriesForStudent(studentId).filter(
+    const entries = gradeEntries.filter(
       (e) => e.isPublished && e.score !== null
     );
 
-    // Group by exam date, compute percentage per class
     const dataMap = new Map<string, Record<string, number | string>>();
 
     for (const entry of entries) {
@@ -45,17 +46,16 @@ export function GradeHistoryChart({ studentId }: GradeHistoryChartProps) {
     return Array.from(dataMap.values()).sort((a, b) =>
       (a.sortKey as string).localeCompare(b.sortKey as string)
     );
-  }, [studentId]);
+  }, [gradeEntries, exams, classes]);
 
   const subjects = useMemo(() => {
-    const entries = getGradeEntriesForStudent(studentId);
     const subjectSet = new Set<string>();
-    for (const entry of entries) {
+    for (const entry of gradeEntries) {
       const cls = classes.find((c) => c.id === entry.classId);
       if (cls) subjectSet.add(cls.subject);
     }
     return Array.from(subjectSet);
-  }, [studentId]);
+  }, [gradeEntries, classes]);
 
   const colors = ["#2563eb", "#16a34a", "#d97706", "#dc2626"];
 

@@ -3,31 +3,25 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
-import { classes, students, getStudentAverageGrade, getStudentAttendanceRate } from "@/lib/mock-data";
+import { TrendingUp, AlertTriangle } from "lucide-react";
 
-export function ClassSnapshot() {
-  // Aggregate stats across all classes
-  const allStudentIds = new Set(classes.flatMap((c) => c.studentIds));
-  const studentStats = [...allStudentIds].map((id) => {
-    const student = students.find((s) => s.id === id);
-    const avg = getStudentAverageGrade(id);
-    const attendance = getStudentAttendanceRate(id);
-    return { student, avg, attendance };
-  });
+interface ClassSnapshotProps {
+  data: {
+    overallAvg: number;
+    atRisk: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      avg: number | null;
+      attendance: number;
+    }[];
+    atRiskCount: number;
+    topPerformers: number;
+  };
+}
 
-  const validGrades = studentStats.filter((s) => s.avg !== null);
-  const overallAvg = validGrades.length > 0
-    ? Math.round(validGrades.reduce((sum, s) => sum + s.avg!, 0) / validGrades.length)
-    : 0;
-
-  const atRisk = studentStats.filter(
-    (s) => (s.avg !== null && s.avg < 65) || s.attendance < 80
-  );
-
-  const topPerformers = studentStats
-    .filter((s) => s.avg !== null && s.avg >= 90)
-    .length;
+export function ClassSnapshot({ data }: ClassSnapshotProps) {
+  const { overallAvg, atRisk, atRiskCount, topPerformers } = data;
 
   return (
     <Card
@@ -54,7 +48,7 @@ export function ClassSnapshot() {
           <div className="flex-1 rounded-lg bg-red-50 p-2.5">
             <div className="flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
-              <span className="text-sm font-bold text-red-700">{atRisk.length}</span>
+              <span className="text-sm font-bold text-red-700">{atRiskCount}</span>
             </div>
             <p className="text-xs text-red-600">At Risk</p>
           </div>
@@ -71,14 +65,14 @@ export function ClassSnapshot() {
           <div>
             <p className="mb-1.5 text-xs font-medium text-gray-500">Students Needing Attention</p>
             <div className="space-y-1">
-              {atRisk.slice(0, 3).map((s) => (
+              {atRisk.map((s) => (
                 <Link
-                  key={s.student?.id}
-                  href={`/students/${s.student?.id}`}
+                  key={s.id}
+                  href={`/students/${s.id}`}
                   className="flex items-center justify-between rounded-lg px-2 py-1.5 text-sm hover:bg-gray-50"
                 >
                   <span className="font-medium text-gray-800">
-                    {s.student?.lastName}, {s.student?.firstName}
+                    {s.lastName}, {s.firstName}
                   </span>
                   <div className="flex gap-2">
                     {s.avg !== null && s.avg < 65 && (

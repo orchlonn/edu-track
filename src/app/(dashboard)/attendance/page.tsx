@@ -1,13 +1,14 @@
 "use client";
 
-import { useReducer, useEffect, useMemo } from "react";
+import { useReducer, useEffect, useMemo, useState, useCallback } from "react";
 import { useClassContext } from "@/contexts/class-context";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { StudentAttendanceRow } from "@/components/attendance/student-attendance-row";
 import { AttendanceSummaryBar } from "@/components/attendance/attendance-summary-bar";
-import { classes, getStudentsByClass, getAttendanceForClassDate } from "@/lib/mock-data";
-import { type AttendanceStatus } from "@/lib/types";
+import { fetchClasses, fetchStudentsByClass, fetchAttendanceForClassDate } from "@/lib/supabase/queries";
+import { saveAttendance } from "@/app/actions/attendance";
+import { type AttendanceStatus, type Class, type Student } from "@/lib/types";
 import { CheckCheck } from "lucide-react";
 
 // ─── Reducer ─────────────────────────────────────────
@@ -69,6 +70,8 @@ function attendanceReducer(state: AttendanceState, action: AttendanceAction): At
 // ─── Component ───────────────────────────────────────
 export default function AttendancePage() {
   const { selectedClassId, setSelectedClassId, selectedDate, setSelectedDate } = useClassContext();
+  const [classList, setClassList] = useState<Class[]>([]);
+  const [studentList, setStudentList] = useState<Student[]>([]);
 
   const [state, dispatch] = useReducer(attendanceReducer, {
     records: {},
@@ -76,26 +79,43 @@ export default function AttendancePage() {
     isSaved: false,
   });
 
-  const currentClass = classes.find((c) => c.id === selectedClassId);
-  const studentList = useMemo(() => getStudentsByClass(selectedClassId), [selectedClassId]);
+  // Load classes
+  useEffect(() => {
+    fetchClasses().then(setClassList);
+  }, []);
+
+  // Load students when class changes
+  useEffect(() => {
+    fetchStudentsByClass(selectedClassId).then(setStudentList);
+  }, [selectedClassId]);
 
   // Load existing attendance when class/date changes
   useEffect(() => {
-    const existing = getAttendanceForClassDate(selectedClassId, selectedDate);
-    const records: Record<string, AttendanceStatus> = {};
-    for (const student of studentList) {
-      const record = existing.find((r) => r.studentId === student.id);
-      records[student.id] = record?.status || "present";
-    }
-    dispatch({ type: "LOAD", records });
+    if (studentList.length === 0) return;
+    fetchAttendanceForClassDate(selectedClassId, selectedDate).then((existing) => {
+      const records: Record<string, AttendanceStatus> = {};
+      for (const student of studentList) {
+        const record = existing.find((r) => r.studentId === student.id);
+        records[student.id] = record?.status || "present";
+      }
+      dispatch({ type: "LOAD", records });
+    });
   }, [selectedClassId, selectedDate, studentList]);
 
-  const classOptions = classes.map((c) => ({ value: c.id, label: c.name }));
-  const unmarkedCount = studentList.length - Object.keys(state.records).length;
+  const currentClass = classList.find((c) => c.id === selectedClassId);
+  const classOptions = classList.map((c) => ({ value: c.id, label: c.name }));
+
+  const handleSave = useCallback(async () => {
+    const records = Object.entries(state.records).map(([studentId, status]) => ({
+      studentId,
+      status,
+    }));
+    await saveAttendance(selectedClassId, selectedDate, records);
+    dispatch({ type: "SAVE" });
+  }, [state.records, selectedClassId, selectedDate]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      {/* Selectors */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1">
           <Select
@@ -116,7 +136,6 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* Bulk action + info */}
       <div className="flex items-center justify-between">
         <Button
           variant="success"
@@ -131,7 +150,6 @@ export default function AttendancePage() {
         </span>
       </div>
 
-      {/* Student List */}
       <div className="space-y-1.5">
         {studentList.map((student, i) => (
           <StudentAttendanceRow
@@ -150,11 +168,10 @@ export default function AttendancePage() {
         <p className="py-8 text-center text-gray-500">No students in this class.</p>
       )}
 
-      {/* Summary Bar */}
       {studentList.length > 0 && (
         <AttendanceSummaryBar
           records={state.records}
-          onSave={() => dispatch({ type: "SAVE" })}
+          onSave={handleSave}
           onUndo={() => dispatch({ type: "UNDO" })}
           canUndo={state.previousRecords !== null}
           isSaved={state.isSaved}

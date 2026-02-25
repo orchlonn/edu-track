@@ -4,16 +4,15 @@ import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { type Student } from "@/lib/types";
-import { getStudentAverageGrade, getStudentAttendanceRate } from "@/lib/mock-data";
-import { TrendingDown, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 
 interface StudentCardProps {
   student: Student;
+  avg: number | null;
+  attendance: number;
 }
 
-export function StudentCard({ student }: StudentCardProps) {
-  const avg = getStudentAverageGrade(student.id);
-  const attendance = getStudentAttendanceRate(student.id);
+export function StudentCard({ student, avg, attendance }: StudentCardProps) {
   const isAtRisk = (avg !== null && avg < 65) || attendance < 80;
 
   return (

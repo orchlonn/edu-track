@@ -10,7 +10,6 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getUnreadMessageCount } from "@/lib/mock-data";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
@@ -20,9 +19,8 @@ const navItems = [
   { href: "/messages", label: "Messages", icon: MessageCircle, badge: true },
 ];
 
-export function MobileNav() {
+export function MobileNav({ unreadCount }: { unreadCount: number }) {
   const pathname = usePathname();
-  const unreadCount = getUnreadMessageCount();
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";

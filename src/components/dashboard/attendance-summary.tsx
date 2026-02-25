@@ -3,33 +3,21 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Users, UserCheck, UserX, Clock } from "lucide-react";
-import { classes, attendanceRecords } from "@/lib/mock-data";
-import { getToday } from "@/lib/utils";
 
-export function AttendanceSummary() {
-  // Compute today's attendance across all classes
-  const today = getToday();
-  const todayRecords = attendanceRecords.filter((r) => r.date === today);
+interface AttendanceSummaryProps {
+  data: {
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    total: number;
+    totalStudents: number;
+  };
+}
 
-  // If no records for today, show last available date
-  const lastDate = todayRecords.length > 0
-    ? today
-    : attendanceRecords.length > 0
-      ? attendanceRecords[attendanceRecords.length - 1].date
-      : null;
-
-  const records = lastDate
-    ? attendanceRecords.filter((r) => r.date === lastDate)
-    : [];
-
-  const total = records.length;
-  const present = records.filter((r) => r.status === "present").length;
-  const absent = records.filter((r) => r.status === "absent").length;
-  const late = records.filter((r) => r.status === "late").length;
-  const excused = records.filter((r) => r.status === "excused").length;
+export function AttendanceSummary({ data }: AttendanceSummaryProps) {
+  const { present, absent, late, total, totalStudents } = data;
   const rate = total > 0 ? Math.round((present / total) * 100) : 0;
-
-  const totalStudents = new Set(classes.flatMap((c) => c.studentIds)).size;
 
   return (
     <Card

@@ -1,11 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Users, GraduationCap, ClipboardCheck, AlertTriangle } from "lucide-react";
-import { classes, students, getStudentAverageGrade, getStudentAttendanceRate } from "@/lib/mock-data";
+import { useState, useEffect } from "react";
+import {
+  fetchClasses,
+  fetchStudents,
+  fetchStudentAverageGrade,
+  fetchStudentAttendanceRate,
+} from "@/lib/supabase/queries";
+import type { Class, Student } from "@/lib/types";
 
 interface ClassStats {
   classId: string;
@@ -18,69 +24,70 @@ interface ClassStats {
 }
 
 export function ClassOverview() {
-  const { classStats, totals } = useMemo(() => {
-    const allStudentIds = new Set(classes.flatMap((c) => c.studentIds));
+  const [classStats, setClassStats] = useState<ClassStats[]>([]);
+  const [totals, setTotals] = useState({ students: 0, avgGrade: 0, attendanceRate: 0, atRisk: 0 });
+  const [loading, setLoading] = useState(true);
 
-    const stats: ClassStats[] = classes.map((cls) => {
-      const studentGrades = cls.studentIds.map((id) => ({
-        avg: getStudentAverageGrade(id, cls.id),
-        attendance: getStudentAttendanceRate(id),
-      }));
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const [classes, students] = await Promise.all([fetchClasses(), fetchStudents()]);
+      const allStudentIds = new Set(classes.flatMap((c) => c.studentIds));
 
-      const validGrades = studentGrades.filter((s) => s.avg !== null);
-      const avgGrade =
-        validGrades.length > 0
-          ? Math.round(validGrades.reduce((sum, s) => sum + s.avg!, 0) / validGrades.length)
-          : 0;
+      const stats: ClassStats[] = await Promise.all(
+        classes.map(async (cls) => {
+          const studentGrades = await Promise.all(
+            cls.studentIds.map(async (id) => ({
+              avg: await fetchStudentAverageGrade(id, cls.id),
+              attendance: await fetchStudentAttendanceRate(id),
+            }))
+          );
 
-      const avgAttendance =
-        studentGrades.length > 0
-          ? Math.round(studentGrades.reduce((sum, s) => sum + s.attendance, 0) / studentGrades.length)
-          : 0;
+          const validGrades = studentGrades.filter((s) => s.avg !== null);
+          const avgGrade = validGrades.length > 0
+            ? Math.round(validGrades.reduce((sum, s) => sum + s.avg!, 0) / validGrades.length)
+            : 0;
+          const avgAttendance = studentGrades.length > 0
+            ? Math.round(studentGrades.reduce((sum, s) => sum + s.attendance, 0) / studentGrades.length)
+            : 0;
+          const atRisk = studentGrades.filter(
+            (s) => (s.avg !== null && s.avg < 65) || s.attendance < 80
+          ).length;
 
-      const atRisk = studentGrades.filter(
+          return {
+            classId: cls.id, className: cls.name, subject: cls.subject,
+            studentCount: cls.studentIds.length, avgGrade, attendanceRate: avgAttendance, atRiskCount: atRisk,
+          };
+        })
+      );
+
+      const allGrades = await Promise.all(
+        [...allStudentIds].map(async (id) => ({
+          avg: await fetchStudentAverageGrade(id),
+          attendance: await fetchStudentAttendanceRate(id),
+        }))
+      );
+      const validAll = allGrades.filter((s) => s.avg !== null);
+      const overallAvg = validAll.length > 0
+        ? Math.round(validAll.reduce((sum, s) => sum + s.avg!, 0) / validAll.length)
+        : 0;
+      const overallAttendance = allGrades.length > 0
+        ? Math.round(allGrades.reduce((sum, s) => sum + s.attendance, 0) / allGrades.length)
+        : 0;
+      const overallAtRisk = allGrades.filter(
         (s) => (s.avg !== null && s.avg < 65) || s.attendance < 80
       ).length;
 
-      return {
-        classId: cls.id,
-        className: cls.name,
-        subject: cls.subject,
-        studentCount: cls.studentIds.length,
-        avgGrade,
-        attendanceRate: avgAttendance,
-        atRiskCount: atRisk,
-      };
-    });
-
-    // Totals across unique students
-    const allGrades = [...allStudentIds].map((id) => ({
-      avg: getStudentAverageGrade(id),
-      attendance: getStudentAttendanceRate(id),
-    }));
-    const validAll = allGrades.filter((s) => s.avg !== null);
-    const overallAvg =
-      validAll.length > 0
-        ? Math.round(validAll.reduce((sum, s) => sum + s.avg!, 0) / validAll.length)
-        : 0;
-    const overallAttendance =
-      allGrades.length > 0
-        ? Math.round(allGrades.reduce((sum, s) => sum + s.attendance, 0) / allGrades.length)
-        : 0;
-    const overallAtRisk = allGrades.filter(
-      (s) => (s.avg !== null && s.avg < 65) || s.attendance < 80
-    ).length;
-
-    return {
-      classStats: stats,
-      totals: {
-        students: allStudentIds.size,
-        avgGrade: overallAvg,
-        attendanceRate: overallAttendance,
-        atRisk: overallAtRisk,
-      },
-    };
+      setClassStats(stats);
+      setTotals({ students: allStudentIds.size, avgGrade: overallAvg, attendanceRate: overallAttendance, atRisk: overallAtRisk });
+      setLoading(false);
+    }
+    load();
   }, []);
+
+  if (loading) {
+    return <p className="py-8 text-center text-sm text-gray-500">Loading overview...</p>;
+  }
 
   return (
     <div className="space-y-6">

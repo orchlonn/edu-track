@@ -3,9 +3,8 @@
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getAttendanceForStudent } from "@/lib/mock-data";
 import { formatDate, getAttendanceLabel } from "@/lib/utils";
-import { type AttendanceStatus } from "@/lib/types";
+import { type AttendanceStatus, type AttendanceRecord } from "@/lib/types";
 
 const statusVariant: Record<AttendanceStatus, "success" | "danger" | "warning" | "info"> = {
   present: "success",
@@ -15,15 +14,15 @@ const statusVariant: Record<AttendanceStatus, "success" | "danger" | "warning" |
 };
 
 interface AttendanceLogProps {
-  studentId: string;
+  records: AttendanceRecord[];
 }
 
-export function AttendanceLog({ studentId }: AttendanceLogProps) {
+export function AttendanceLog({ records: rawRecords }: AttendanceLogProps) {
   const records = useMemo(() => {
-    return getAttendanceForStudent(studentId).sort(
+    return [...rawRecords].sort(
       (a, b) => b.date.localeCompare(a.date)
     );
-  }, [studentId]);
+  }, [rawRecords]);
 
   const total = records.length;
   const present = records.filter((r) => r.status === "present").length;

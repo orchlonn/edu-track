@@ -6,7 +6,9 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { GradeEntryTable } from "@/components/grades/grade-entry-table";
 import { GradeSummary } from "@/components/grades/grade-summary";
-import { classes, getStudentsByClass, getExamsByClass, getGradeEntriesForExam } from "@/lib/mock-data";
+import { fetchClasses, fetchStudentsByClass, fetchExamsByClass, fetchGradeEntriesForExam } from "@/lib/supabase/queries";
+import { saveGrades, publishGrades } from "@/app/actions/grades";
+import { type Class, type Student, type Exam } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { Save, Send } from "lucide-react";
 
@@ -46,6 +48,9 @@ function gradeReducer(state: GradeState, action: GradeAction): GradeState {
 // ─── Component ───────────────────────────────────────
 export default function GradesPage() {
   const { selectedClassId, setSelectedClassId } = useClassContext();
+  const [classList, setClassList] = useState<Class[]>([]);
+  const [studentList, setStudentList] = useState<Student[]>([]);
+  const [examList, setExamList] = useState<Exam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState<string>("");
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
 
@@ -55,32 +60,39 @@ export default function GradesPage() {
     isPublished: false,
   });
 
-  const studentList = useMemo(() => getStudentsByClass(selectedClassId), [selectedClassId]);
-  const examList = useMemo(() => getExamsByClass(selectedClassId), [selectedClassId]);
-
-  // Auto-select first exam when class changes
+  // Load classes
   useEffect(() => {
-    if (examList.length > 0) {
-      setSelectedExamId(examList[examList.length - 1].id);
-    } else {
-      setSelectedExamId("");
-    }
-  }, [examList]);
+    fetchClasses().then(setClassList);
+  }, []);
+
+  // Load students + exams when class changes
+  useEffect(() => {
+    fetchStudentsByClass(selectedClassId).then(setStudentList);
+    fetchExamsByClass(selectedClassId).then((exams) => {
+      setExamList(exams);
+      if (exams.length > 0) {
+        setSelectedExamId(exams[exams.length - 1].id);
+      } else {
+        setSelectedExamId("");
+      }
+    });
+  }, [selectedClassId]);
 
   // Load grades when exam changes
   useEffect(() => {
     if (!selectedExamId) return;
-    const entries = getGradeEntriesForExam(selectedExamId);
-    const scores: Record<string, number | null> = {};
-    for (const student of studentList) {
-      const entry = entries.find((e) => e.studentId === student.id);
-      scores[student.id] = entry?.score ?? null;
-    }
-    dispatch({ type: "LOAD", scores });
+    fetchGradeEntriesForExam(selectedExamId).then((entries) => {
+      const scores: Record<string, number | null> = {};
+      for (const student of studentList) {
+        const entry = entries.find((e) => e.studentId === student.id);
+        scores[student.id] = entry?.score ?? null;
+      }
+      dispatch({ type: "LOAD", scores });
+    });
   }, [selectedExamId, studentList]);
 
   const selectedExam = examList.find((e) => e.id === selectedExamId);
-  const classOptions = classes.map((c) => ({ value: c.id, label: c.name }));
+  const classOptions = classList.map((c) => ({ value: c.id, label: c.name }));
   const examOptions = examList.map((e) => ({
     value: e.id,
     label: `${e.name} (${formatDate(e.date)})`,
@@ -88,9 +100,30 @@ export default function GradesPage() {
 
   const enteredCount = Object.values(state.scores).filter((s) => s !== null).length;
 
+  async function handleSaveDraft() {
+    if (!selectedExamId) return;
+    const entries = Object.entries(state.scores).map(([studentId, score]) => ({
+      studentId,
+      score,
+    }));
+    await saveGrades(selectedExamId, selectedClassId, entries);
+    dispatch({ type: "SAVE_DRAFT" });
+  }
+
+  async function handlePublish() {
+    if (!selectedExamId) return;
+    const entries = Object.entries(state.scores).map(([studentId, score]) => ({
+      studentId,
+      score,
+    }));
+    await saveGrades(selectedExamId, selectedClassId, entries);
+    await publishGrades(selectedExamId);
+    dispatch({ type: "PUBLISH" });
+    setShowPublishConfirm(false);
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      {/* Selectors */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1">
           <Select
@@ -110,7 +143,6 @@ export default function GradesPage() {
         </div>
       </div>
 
-      {/* Exam info */}
       {selectedExam && (
         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
           <span>Max Score: <span className="font-semibold text-gray-700">{selectedExam.maxScore}</span></span>
@@ -126,7 +158,6 @@ export default function GradesPage() {
         </div>
       )}
 
-      {/* Grade Entry */}
       {selectedExam ? (
         <>
           <GradeEntryTable
@@ -138,32 +169,23 @@ export default function GradesPage() {
             }
           />
 
-          {/* Summary */}
           <GradeSummary
             scores={state.scores}
             maxScore={selectedExam.maxScore}
             totalStudents={studentList.length}
           />
 
-          {/* Actions */}
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-            <Button
-              variant="secondary"
-              onClick={() => dispatch({ type: "SAVE_DRAFT" })}
-            >
+            <Button variant="secondary" onClick={handleSaveDraft}>
               <Save className="h-4 w-4" />
               {state.isDraft ? "Draft Saved" : "Save as Draft"}
             </Button>
-            <Button
-              variant="primary"
-              onClick={() => setShowPublishConfirm(true)}
-            >
+            <Button variant="primary" onClick={() => setShowPublishConfirm(true)}>
               <Send className="h-4 w-4" />
               Publish to Parents
             </Button>
           </div>
 
-          {/* Publish confirmation */}
           {showPublishConfirm && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm font-medium text-amber-800">
@@ -176,21 +198,10 @@ export default function GradesPage() {
                 )}
               </p>
               <div className="mt-3 flex gap-2">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    dispatch({ type: "PUBLISH" });
-                    setShowPublishConfirm(false);
-                  }}
-                >
+                <Button variant="primary" size="sm" onClick={handlePublish}>
                   Publish All
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowPublishConfirm(false)}
-                >
+                <Button variant="ghost" size="sm" onClick={() => setShowPublishConfirm(false)}>
                   Cancel
                 </Button>
               </div>

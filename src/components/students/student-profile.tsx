@@ -8,34 +8,42 @@ import { StatCard } from "@/components/ui/stat-card";
 import { GradeHistoryChart } from "./grade-history-chart";
 import { AttendanceLog } from "./attendance-log";
 import { TeacherNotes } from "./teacher-notes";
-import { type Student } from "@/lib/types";
 import {
-  getStudentAverageGrade,
-  getStudentAttendanceRate,
-  getGradeEntriesForStudent,
-  exams,
-  classes,
-} from "@/lib/mock-data";
+  type Student,
+  type Class,
+  type Exam,
+  type GradeEntry,
+  type AttendanceRecord,
+  type TeacherNote,
+} from "@/lib/types";
 import { calculateLetterGrade, formatDate, getGradeColor } from "@/lib/utils";
 import { Mail, ArrowLeft, Phone } from "lucide-react";
 
 interface StudentProfileProps {
   student: Student;
+  overallAvg: number | null;
+  attendance: number;
+  classAverages: { cls: Class | null; avg: number | null }[];
+  gradeEntries: GradeEntry[];
+  attendanceRecords: AttendanceRecord[];
+  notes: TeacherNote[];
+  exams: Exam[];
+  classes: Class[];
 }
 
-export function StudentProfile({ student }: StudentProfileProps) {
-  const overallAvg = getStudentAverageGrade(student.id);
-  const attendance = getStudentAttendanceRate(student.id);
-
-  // Per-class averages
-  const classAverages = student.classIds.map((classId) => {
-    const cls = classes.find((c) => c.id === classId);
-    const avg = getStudentAverageGrade(student.id, classId);
-    return { cls, avg };
-  });
-
+export function StudentProfile({
+  student,
+  overallAvg,
+  attendance,
+  classAverages,
+  gradeEntries,
+  attendanceRecords,
+  notes,
+  exams,
+  classes,
+}: StudentProfileProps) {
   // Recent exams
-  const recentExams = getGradeEntriesForStudent(student.id)
+  const recentExams = gradeEntries
     .filter((e) => e.isPublished && e.score !== null)
     .map((entry) => {
       const exam = exams.find((e) => e.id === entry.examId);
@@ -48,7 +56,6 @@ export function StudentProfile({ student }: StudentProfileProps) {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      {/* Back button */}
       <Link
         href="/students"
         className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700"
@@ -57,7 +64,6 @@ export function StudentProfile({ student }: StudentProfileProps) {
         Back to Students
       </Link>
 
-      {/* Header */}
       <div className="rounded-xl border border-border bg-white p-4 md:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <Avatar firstName={student.firstName} lastName={student.lastName} size="lg" />
@@ -66,7 +72,7 @@ export function StudentProfile({ student }: StudentProfileProps) {
               {student.firstName} {student.lastName}
             </h2>
             <p className="text-sm text-gray-500">
-              {student.grade} Grade &middot; ID: {student.id.toUpperCase()}
+              {student.grade} Grade
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
               <span className="flex items-center gap-1">
@@ -86,7 +92,6 @@ export function StudentProfile({ student }: StudentProfileProps) {
         </div>
       </div>
 
-      {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard
           label="Overall Average"
@@ -128,11 +133,9 @@ export function StudentProfile({ student }: StudentProfileProps) {
         )}
       </div>
 
-      {/* Chart + Recent Exams */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <GradeHistoryChart studentId={student.id} />
+        <GradeHistoryChart gradeEntries={gradeEntries} exams={exams} classes={classes} />
 
-        {/* Recent Exams */}
         <div className="rounded-xl border border-border bg-card p-4">
           <h3 className="mb-3 text-sm font-semibold text-gray-900">Recent Exams</h3>
           <div className="space-y-1">
@@ -168,10 +171,9 @@ export function StudentProfile({ student }: StudentProfileProps) {
         </div>
       </div>
 
-      {/* Attendance + Notes */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <AttendanceLog studentId={student.id} />
-        <TeacherNotes studentId={student.id} />
+        <AttendanceLog records={attendanceRecords} />
+        <TeacherNotes studentId={student.id} initialNotes={notes} />
       </div>
     </div>
   );

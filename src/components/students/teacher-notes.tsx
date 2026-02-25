@@ -3,21 +3,21 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getNotesForStudent } from "@/lib/mock-data";
 import { type TeacherNote } from "@/lib/types";
+import { addNote } from "@/app/actions/notes";
 import { Plus } from "lucide-react";
 
 interface TeacherNotesProps {
   studentId: string;
+  initialNotes: TeacherNote[];
 }
 
-export function TeacherNotes({ studentId }: TeacherNotesProps) {
-  const initialNotes = getNotesForStudent(studentId);
+export function TeacherNotes({ studentId, initialNotes }: TeacherNotesProps) {
   const [notes, setNotes] = useState<TeacherNote[]>(initialNotes);
   const [isAdding, setIsAdding] = useState(false);
   const [newNote, setNewNote] = useState("");
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!newNote.trim()) return;
     const note: TeacherNote = {
       id: `n-${Date.now()}`,
@@ -28,6 +28,8 @@ export function TeacherNotes({ studentId }: TeacherNotesProps) {
     setNotes([note, ...notes]);
     setNewNote("");
     setIsAdding(false);
+
+    await addNote(studentId, note.content);
   }
 
   const formatNoteDate = (dateStr: string) => {

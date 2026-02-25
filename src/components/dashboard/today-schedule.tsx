@@ -6,10 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, MapPin, CheckCircle2 } from "lucide-react";
 import { formatTime, cn } from "@/lib/utils";
 import { type ScheduleItem } from "@/lib/types";
-import { getClassById } from "@/lib/mock-data";
+
+interface ScheduleItemWithClass extends ScheduleItem {
+  className: string;
+  classRoom: string;
+}
 
 interface TodayScheduleProps {
-  items: ScheduleItem[];
+  items: ScheduleItemWithClass[];
 }
 
 export function TodaySchedule({ items }: TodayScheduleProps) {
@@ -27,12 +31,10 @@ export function TodaySchedule({ items }: TodayScheduleProps) {
   return (
     <Card title="Today's Schedule">
       <div className="space-y-1">
-        {/* Free/lunch periods interleaved */}
         {[1, 2, 3, 4, 5, 6, 7].map((period) => {
           const scheduleItem = items.find((s) => s.period === period);
 
           if (!scheduleItem) {
-            // Show free period / lunch
             if (period === 3) {
               return (
                 <div key={period} className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-400">
@@ -53,9 +55,6 @@ export function TodaySchedule({ items }: TodayScheduleProps) {
             }
             return null;
           }
-
-          const cls = getClassById(scheduleItem.classId);
-          if (!cls) return null;
 
           const [startH, startM] = scheduleItem.startTime.split(":").map(Number);
           const [endH, endM] = scheduleItem.endTime.split(":").map(Number);
@@ -83,11 +82,11 @@ export function TodaySchedule({ items }: TodayScheduleProps) {
                 {formatTime(scheduleItem.startTime)}
               </span>
               <span className="flex-1 text-sm font-medium text-gray-800">
-                {cls.name}
+                {scheduleItem.className}
               </span>
               <span className="hidden items-center gap-1 text-xs text-gray-500 sm:flex">
                 <MapPin className="h-3 w-3" />
-                {cls.room}
+                {scheduleItem.classRoom}
               </span>
               {isPast ? (
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />

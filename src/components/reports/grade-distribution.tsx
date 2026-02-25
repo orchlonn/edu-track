@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   BarChart,
   Bar,
@@ -16,12 +16,13 @@ import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { useClassContext } from "@/contexts/class-context";
 import {
-  classes,
-  getGradeDistributionByClass,
-  getExamsByClass,
-  getGradeEntriesForExam,
-} from "@/lib/mock-data";
+  fetchClasses,
+  fetchGradeDistributionByClass,
+  fetchExamsByClass,
+  fetchGradeEntriesForExam,
+} from "@/lib/supabase/queries";
 import { formatDate } from "@/lib/utils";
+import type { Class } from "@/lib/types";
 
 const gradeColors: Record<string, string> = {
   A: "#16a34a",
@@ -31,46 +32,75 @@ const gradeColors: Record<string, string> = {
   F: "#dc2626",
 };
 
+interface ExamStat {
+  id: string;
+  name: string;
+  date: string;
+  type: string;
+  maxScore: number;
+  avg: number;
+  high: number;
+  low: number;
+  passRate: number;
+  entryCount: number;
+}
+
 export function GradeDistribution() {
   const { selectedClassId, setSelectedClassId } = useClassContext();
-  const classOptions = classes.map((c) => ({ value: c.id, label: c.name }));
+  const [classList, setClassList] = useState<Class[]>([]);
+  const [chartData, setChartData] = useState<{ grade: string; count: number; fill: string }[]>([]);
+  const [examStats, setExamStats] = useState<ExamStat[]>([]);
 
-  const chartData = useMemo(() => {
-    const dist = getGradeDistributionByClass(selectedClassId);
-    return (Object.keys(dist) as (keyof typeof dist)[]).map((grade) => ({
-      grade,
-      count: dist[grade],
-      fill: gradeColors[grade],
-    }));
-  }, [selectedClassId]);
+  useEffect(() => {
+    fetchClasses().then(setClassList);
+  }, []);
 
-  const examStats = useMemo(() => {
-    const examList = getExamsByClass(selectedClassId).filter((e) => e.isPublished);
-    return examList.map((exam) => {
-      const entries = getGradeEntriesForExam(exam.id).filter(
-        (e) => e.score !== null
+  useEffect(() => {
+    async function loadData() {
+      if (!selectedClassId || !classList.find((c) => c.id === selectedClassId)) return;
+
+      const dist = await fetchGradeDistributionByClass(selectedClassId);
+      setChartData(
+        (Object.keys(dist) as (keyof typeof dist)[]).map((grade) => ({
+          grade,
+          count: dist[grade],
+          fill: gradeColors[grade],
+        }))
       );
-      const scores = entries.map((e) => e.score!);
-      const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
-      const high = scores.length > 0 ? Math.max(...scores) : 0;
-      const low = scores.length > 0 ? Math.min(...scores) : 0;
-      const passCount = scores.filter((s) => (s / exam.maxScore) * 100 >= 60).length;
-      const passRate = scores.length > 0 ? Math.round((passCount / scores.length) * 100) : 0;
 
-      return {
-        id: exam.id,
-        name: exam.name,
-        date: exam.date,
-        type: exam.type,
-        maxScore: exam.maxScore,
-        avg,
-        high,
-        low,
-        passRate,
-        entryCount: scores.length,
-      };
-    });
-  }, [selectedClassId]);
+      const examList = (await fetchExamsByClass(selectedClassId)).filter((e) => e.isPublished);
+      const stats: ExamStat[] = await Promise.all(
+        examList.map(async (exam) => {
+          const entries = (await fetchGradeEntriesForExam(exam.id)).filter(
+            (e) => e.score !== null
+          );
+          const scores = entries.map((e) => e.score!);
+          const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+          const high = scores.length > 0 ? Math.max(...scores) : 0;
+          const low = scores.length > 0 ? Math.min(...scores) : 0;
+          const passCount = scores.filter((s) => (s / exam.maxScore) * 100 >= 60).length;
+          const passRate = scores.length > 0 ? Math.round((passCount / scores.length) * 100) : 0;
+
+          return {
+            id: exam.id,
+            name: exam.name,
+            date: exam.date,
+            type: exam.type,
+            maxScore: exam.maxScore,
+            avg,
+            high,
+            low,
+            passRate,
+            entryCount: scores.length,
+          };
+        })
+      );
+      setExamStats(stats);
+    }
+    loadData();
+  }, [selectedClassId, classList]);
+
+  const classOptions = classList.map((c) => ({ value: c.id, label: c.name }));
 
   const totalStudents = chartData.reduce((sum, d) => sum + d.count, 0);
 

@@ -14,11 +14,11 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getUnreadMessageCount } from "@/lib/mock-data";
 
 interface SidebarProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  unreadCount: number;
 }
 
 const navItems = [
@@ -30,9 +30,8 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: BarChart3 },
 ];
 
-export function Sidebar({ isCollapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ isCollapsed, onToggleCollapse, unreadCount }: SidebarProps) {
   const pathname = usePathname();
-  const unreadCount = getUnreadMessageCount();
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
