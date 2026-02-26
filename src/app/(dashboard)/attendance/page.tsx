@@ -9,7 +9,7 @@ import { AttendanceSummaryBar } from "@/components/attendance/attendance-summary
 import { fetchClasses, fetchStudentsByClass, fetchAttendanceForClassDate } from "@/lib/supabase/queries";
 import { saveAttendance } from "@/app/actions/attendance";
 import { type AttendanceStatus, type Class, type Student } from "@/lib/types";
-import { CheckCheck } from "lucide-react";
+import { CheckCheck, Search } from "lucide-react";
 
 // ─── Reducer ─────────────────────────────────────────
 interface AttendanceState {
@@ -72,6 +72,8 @@ export default function AttendancePage() {
   const { selectedClassId, setSelectedClassId, selectedDate, setSelectedDate } = useClassContext();
   const [classList, setClassList] = useState<Class[]>([]);
   const [studentList, setStudentList] = useState<Student[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadedDate, setLoadedDate] = useState("");
 
   const [state, dispatch] = useReducer(attendanceReducer, {
     records: {},
@@ -95,18 +97,30 @@ export default function AttendancePage() {
     fetchStudentsByClass(selectedClassId).then(setStudentList);
   }, [selectedClassId]);
 
-  // Load existing attendance when class/date changes
-  useEffect(() => {
-    if (!selectedClassId || studentList.length === 0) return;
-    fetchAttendanceForClassDate(selectedClassId, selectedDate).then((existing) => {
+  // Load attendance for the current class and date
+  const loadAttendance = useCallback(async (students: Student[] = studentList) => {
+    if (!selectedClassId || students.length === 0) return;
+    setIsLoading(true);
+    try {
+      const existing = await fetchAttendanceForClassDate(selectedClassId, selectedDate);
       const records: Record<string, AttendanceStatus> = {};
-      for (const student of studentList) {
+      for (const student of students) {
         const record = existing.find((r) => r.studentId === student.id);
         records[student.id] = record?.status || "present";
       }
       dispatch({ type: "LOAD", records });
-    });
+      setLoadedDate(selectedDate);
+    } finally {
+      setIsLoading(false);
+    }
   }, [selectedClassId, selectedDate, studentList]);
+
+  // Auto-load when class changes (students list updates)
+  useEffect(() => {
+    if (studentList.length > 0) {
+      loadAttendance(studentList);
+    }
+  }, [selectedClassId, studentList]);
 
   const currentClass = classList.find((c) => c.id === selectedClassId);
   const classOptions = classList.map((c) => ({ value: c.id, label: c.name }));
@@ -133,12 +147,22 @@ export default function AttendancePage() {
         </div>
         <div className="flex-1">
           <label className="mb-1 block text-sm font-medium text-gray-700">Date</label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="h-11 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
+          <div className="flex gap-2">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="h-11 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+            <Button
+              size="md"
+              onClick={() => loadAttendance()}
+              disabled={isLoading || selectedDate === loadedDate}
+            >
+              <Search className="h-4 w-4" />
+              {isLoading ? "Loading..." : "Load"}
+            </Button>
+          </div>
         </div>
       </div>
 
